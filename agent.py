@@ -5,7 +5,7 @@ Features: Semantic Scholar API, self-refinement loop, execution sandbox,
 """
 
 import os, io, ast, json, uuid, hashlib, zipfile, sqlite3, base64
-import shutil, subprocess, tempfile, requests, argparse
+import shutil, subprocess, tempfile, requests, argparse, fitz
 from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
@@ -230,7 +230,38 @@ Return ONLY a JSON array:
         return []
 
     # ---------------------------------------------- 3. Code generation + refine
-    def _impl_prompt(self, paper: Dict) -> str:
+    def _download_and_extract_pdf(self, paper: Dict) -> str:
+        """Download the PDF (e.g., from arXiv) and extract all text for full-context RAG."""
+        link = paper.get("link", "")
+        if not link:
+            return ""
+
+        # Convert arXiv abs link to pdf link
+        if "arxiv.org/abs/" in link:
+            link = link.replace("/abs/", "/pdf/")
+            if not link.endswith(".pdf"):
+                link += ".pdf"
+
+        print(f"   📥 Downloading PDF from: {link}")
+        try:
+            r = requests.get(link, timeout=15)
+            if r.status_code == 200:
+                doc = fitz.open(stream=r.content, filetype="pdf")
+                text = ""
+                # Extract text from all pages (limit to 25 pages to avoid massive memory issues)
+                for page in doc[:25]:
+                    text += page.get_text() + "\n"
+                print(f"   ✅ Extracted {len(text)} characters from PDF")
+                # Truncate to ~60,000 characters to stay safely within Groq 128k context limit
+                return text[:60000]
+            else:
+                print(f"   ⚠️ PDF download failed with status {r.status_code}")
+        except Exception as ex:
+            print(f"   ⚠️ PDF extraction error: {ex}")
+        return ""
+
+    def _impl_prompt(self, paper: Dict, pdf_text: str = "") -> str:
+        pdf_context = f"\n\n--- FULL PAPER TEXT ---\n{pdf_text}\n--- END FULL PAPER TEXT ---\n" if pdf_text else ""
         return f"""Generate a complete Python implementation for this paper:
 
 Title: {paper['title']}
@@ -238,7 +269,7 @@ Authors: {paper.get('authors','')}
 Link: {paper.get('link','')}
 Summary: {paper.get('summary','')}
 Key result to reproduce: {paper['key_result']}
-
+{pdf_context}
 Create exactly these files using this format:
 
 FILENAME: main.py
@@ -449,7 +480,13 @@ Return ONLY JSON: {{"correctness":20,"reproducibility":18,"feedback":"one senten
 
         if cb: cb("⚙️ Generating implementation...")
         print(f"\n⚙️  Generating: {paper['title']}")
-        response_text = self._generate(self._impl_prompt(paper), max_tokens=4000)
+
+        # Option 1 RAG: Download and extract full PDF text to inject into context
+        if cb: cb("📥 Reading full PDF paper for context...")
+        pdf_text = self._download_and_extract_pdf(paper)
+        if pdf_text and cb: cb("🧠 Paper read! Writing code using full methodology...")
+
+        response_text = self._generate(self._impl_prompt(paper, pdf_text), max_tokens=4000)
         files = self._parse_files(response_text)
 
         files = self._refine_code(files, paper, cb)
