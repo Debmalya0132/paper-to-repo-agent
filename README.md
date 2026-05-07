@@ -4,6 +4,8 @@ An autonomous AI agent that reads AI/ML job descriptions, identifies the most re
 
 Built to automate the transition from academic research to applied engineering.
 
+**🌐 Live Demo:** [https://paper-to-repo-agent.onrender.com/](https://paper-to-repo-agent.onrender.com/)
+
 ---
 
 ## 🎯 What it does
