@@ -262,32 +262,32 @@ Return ONLY a JSON array:
 
     def _impl_prompt(self, paper: Dict, pdf_text: str = "") -> str:
         pdf_context = f"\n\n--- FULL PAPER TEXT ---\n{pdf_text}\n--- END FULL PAPER TEXT ---\n" if pdf_text else ""
-        return f"""Generate a complete Python implementation for this paper:
+        return f"""You are an expert AI researcher and engineer. Your task is to implement the following paper in Python.
 
 Title: {paper['title']}
-Authors: {paper.get('authors','')}
-Link: {paper.get('link','')}
-Summary: {paper.get('summary','')}
 Key result to reproduce: {paper['key_result']}
 {pdf_context}
-Create exactly these files using this format:
+
+CRITICAL INSTRUCTIONS:
+1. You MUST write the code to reproduce the key result based on the provided paper text.
+2. You MUST output EXACTLY 3 files.
+3. You MUST use EXACTLY the format below. 
+4. DO NOT write any conversational text before or after. Start immediately with FILENAME: main.py.
 
 FILENAME: main.py
 ```python
-<code>
+# Code goes here
 ```
 
 FILENAME: requirements.txt
 ```
-<packages, one per line>
+# Packages go here
 ```
 
 FILENAME: README.md
 ```markdown
-<docs>
+# Documentation goes here
 ```
-
-Write clean, well-commented, runnable code. Focus on: {paper['key_result']}
 """
 
     def _refine_code(self, files: Dict[str, str], paper: Dict,
