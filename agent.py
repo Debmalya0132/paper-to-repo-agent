@@ -5,7 +5,7 @@ Features: Semantic Scholar API, self-refinement loop, execution sandbox,
 """
 
 import os, io, ast, json, uuid, hashlib, zipfile, sqlite3, base64
-import shutil, subprocess, tempfile, requests, argparse, fitz
+import shutil, subprocess, tempfile, requests, argparse, fitz, random
 from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
@@ -15,8 +15,9 @@ from ddgs import DDGS
 
 load_dotenv(override=True)
 
-_key = os.environ.get("GROQ_API_KEY", "")
-print(f"[startup] GROQ_API_KEY: {'YES — ' + _key[:8] + '...' if _key else 'MISSING'}")
+_keys_str = os.environ.get("GROQ_API_KEYS", "") or os.environ.get("GROQ_API_KEY", "")
+_keys = [k.strip() for k in _keys_str.split(",") if k.strip()]
+print(f"[startup] GROQ_API_KEYS loaded: {len(_keys)} keys found.")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "papers.db")
 
@@ -41,16 +42,23 @@ _init_db()
 
 class PaperToRepoAgent:
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
-        if not self.api_key:
-            raise ValueError("GROQ_API_KEY missing. Get one free at https://console.groq.com/")
-        self.client = Groq(api_key=self.api_key)
+    def __init__(self, api_keys: Optional[List[str]] = None):
+        if api_keys is None:
+            keys_str = os.environ.get("GROQ_API_KEYS", "") or os.environ.get("GROQ_API_KEY", "")
+            self.api_keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+        else:
+            self.api_keys = api_keys
+
+        if not self.api_keys:
+            raise ValueError("GROQ_API_KEYS missing. Get one free at https://console.groq.com/")
+        
+        self.clients = [Groq(api_key=k) for k in self.api_keys]
         self.model = "llama-3.3-70b-versatile"
 
     # ------------------------------------------------------------------ helpers
     def _generate(self, prompt: str, max_tokens: int = 2000) -> str:
-        resp = self.client.chat.completions.create(
+        client = random.choice(self.clients)
+        resp = client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
