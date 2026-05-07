@@ -256,12 +256,12 @@ Return ONLY a JSON array:
             if r.status_code == 200:
                 doc = fitz.open(stream=r.content, filetype="pdf")
                 text = ""
-                # Extract text from all pages (limit to 25 pages to avoid massive memory issues)
-                for page in doc[:25]:
+                # Extract text from all pages (limit to 10 pages to avoid massive memory issues)
+                for page in doc[:10]:
                     text += page.get_text() + "\n"
                 print(f"   ✅ Extracted {len(text)} characters from PDF")
-                # Truncate to ~60,000 characters to stay safely within Groq 128k context limit
-                return text[:60000]
+                # Truncate to ~25,000 characters to stay safely under Groq 12k TPM limit
+                return text[:25000]
             else:
                 print(f"   ⚠️ PDF download failed with status {r.status_code}")
         except Exception as ex:
