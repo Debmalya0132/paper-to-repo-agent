@@ -271,8 +271,8 @@ Return ONLY a JSON array:
                 
                 print(f"   ✅ Extracted {len(text)} characters from PDF (filtered core)")
                 
-                # Truncate to ~35,000 chars. Since we removed junk, this is almost purely Intro + Methodology
-                return text[:35000]
+                # Truncate to 25,000 chars (~6,000 tokens). This is almost purely Intro + Methodology
+                return text[:25000]
             else:
                 print(f"   ⚠️ PDF download failed with status {r.status_code}")
         except Exception as ex:
@@ -505,7 +505,8 @@ Return ONLY JSON: {{"correctness":20,"reproducibility":18,"feedback":"one senten
         pdf_text = self._download_and_extract_pdf(paper)
         if pdf_text and cb: cb("🧠 Paper read! Writing code using full methodology...")
 
-        response_text = self._generate(self._impl_prompt(paper, pdf_text), max_tokens=4000)
+        # Requesting max_tokens=3000 ensures input_tokens + max_tokens stays under the 12,000 TPM limit
+        response_text = self._generate(self._impl_prompt(paper, pdf_text), max_tokens=3000)
         files = self._parse_files(response_text)
 
         files = self._refine_code(files, paper, cb)
