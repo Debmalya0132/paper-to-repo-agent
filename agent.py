@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from ddgs import DDGS
 
 load_dotenv(override=True)
@@ -46,15 +46,16 @@ class PaperToRepoAgent:
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY missing. Get one free at https://aistudio.google.com/")
         
-        genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        self.client = genai.Client(api_key=self.api_key)
+        self.model = "gemini-1.5-flash"
 
     # ------------------------------------------------------------------ helpers
     def _generate(self, prompt: str, max_tokens: int = 3000) -> str:
         try:
-            resp = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            resp = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
                     max_output_tokens=max_tokens,
                     temperature=0.3,
                 )
