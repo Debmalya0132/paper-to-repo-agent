@@ -10,14 +10,13 @@ from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
 from dotenv import load_dotenv
-from groq import Groq
+import google.generativeai as genai
 from ddgs import DDGS
 
 load_dotenv(override=True)
 
-_keys_str = os.environ.get("GROQ_API_KEYS", "") or os.environ.get("GROQ_API_KEY", "")
-_keys = [k.strip() for k in _keys_str.split(",") if k.strip()]
-print(f"[startup] GROQ_API_KEYS loaded: {len(_keys)} keys found.")
+_key = os.environ.get("GEMINI_API_KEY", "")
+print(f"[startup] GEMINI_API_KEY: {'YES — ' + _key[:8] + '...' if _key else 'MISSING'}")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "papers.db")
 
@@ -42,42 +41,27 @@ _init_db()
 
 class PaperToRepoAgent:
 
-    def __init__(self, api_keys: Optional[List[str]] = None):
-        if api_keys is None:
-            keys_str = os.environ.get("GROQ_API_KEYS", "") or os.environ.get("GROQ_API_KEY", "")
-            self.api_keys = [k.strip() for k in keys_str.split(",") if k.strip()]
-        else:
-            self.api_keys = api_keys
-
-        if not self.api_keys:
-            raise ValueError("GROQ_API_KEYS missing. Get one free at https://console.groq.com/")
+    def __init__(self):
+        self.api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY missing. Get one free at https://aistudio.google.com/")
         
-        self.clients = [Groq(api_key=k) for k in self.api_keys]
-        self.model = "llama-3.3-70b-versatile"
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel("gemini-1.5-flash")
 
     # ------------------------------------------------------------------ helpers
-    def _generate(self, prompt: str, max_tokens: int = 2000) -> str:
-        available = list(self.clients)
-        random.shuffle(available)
-        
-        last_err = None
-        for client in available:
-            try:
-                resp = client.chat.completions.create(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=max_tokens,
+    def _generate(self, prompt: str, max_tokens: int = 3000) -> str:
+        try:
+            resp = self.model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens,
                     temperature=0.3,
                 )
-                return resp.choices[0].message.content or ""
-            except Exception as e:
-                if "429" in str(e) or "rate limit" in str(e).lower() or "413" in str(e):
-                    print(f"   ⚠️ API Key limit hit. Auto-switching to next key...")
-                    last_err = e
-                    continue
-                raise e
-                
-        raise Exception(f"All API keys exhausted! Please wait for quotas to reset. Last error: {last_err}")
+            )
+            return resp.text
+        except Exception as e:
+            raise Exception(f"Gemini API Error: {str(e)}")
 
     def _parse_files(self, response: str) -> Dict[str, str]:
         files = {}
