@@ -47,7 +47,7 @@ class PaperToRepoAgent:
             raise ValueError("GEMINI_API_KEY missing. Get one free at https://aistudio.google.com/")
         
         self.client = genai.Client(api_key=self.api_key)
-        self.model = "gemini-1.5-flash"
+        self.model = "gemini-2.5-flash"
 
     # ------------------------------------------------------------------ helpers
     def _generate(self, prompt: str, max_tokens: int = 3000) -> str:
