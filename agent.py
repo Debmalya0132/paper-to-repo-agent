@@ -5,7 +5,7 @@ Features: Semantic Scholar API, self-refinement loop, execution sandbox,
 """
 
 import os, io, ast, json, uuid, hashlib, zipfile, sqlite3, base64
-import shutil, subprocess, tempfile, requests, argparse, fitz, random
+import shutil, subprocess, tempfile, requests, argparse, fitz, random, re
 from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
@@ -256,12 +256,23 @@ Return ONLY a JSON array:
             if r.status_code == 200:
                 doc = fitz.open(stream=r.content, filetype="pdf")
                 text = ""
-                # Extract text from all pages (limit to 10 pages to avoid massive memory issues)
-                for page in doc[:10]:
+                # Extract text from pages (limit to 15 to avoid massive books)
+                for page in doc[:15]:
                     text += page.get_text() + "\n"
-                print(f"   ✅ Extracted {len(text)} characters from PDF")
-                # Truncate to ~25,000 characters to stay safely under Groq 12k TPM limit
-                return text[:25000]
+                
+                # Smart Token Saver: Strip out references, bibliography, and appendices
+                ref_match = re.search(r'\n(References|REFERENCES|Bibliography|BIBLIOGRAPHY)\s*\n', text)
+                if ref_match:
+                    text = text[:ref_match.start()]
+                
+                ack_match = re.search(r'\n(Acknowledgments|ACKNOWLEDGMENTS|Acknowledgements|ACKNOWLEDGEMENTS)\s*\n', text)
+                if ack_match:
+                    text = text[:ack_match.start()]
+                
+                print(f"   ✅ Extracted {len(text)} characters from PDF (filtered core)")
+                
+                # Truncate to ~35,000 chars. Since we removed junk, this is almost purely Intro + Methodology
+                return text[:35000]
             else:
                 print(f"   ⚠️ PDF download failed with status {r.status_code}")
         except Exception as ex:
