@@ -56,7 +56,6 @@ class PaperToRepoAgent:
                 model=self.model,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
-                    max_output_tokens=max_tokens,
                     temperature=0.3,
                 )
             )
@@ -120,15 +119,17 @@ After reasoning, output ONLY a JSON array of 5 terms:
 ["term1", "term2", "term3", "term4", "term5"]
 """
         text = self._generate(prompt, max_tokens=800)
-        s, e = text.rfind("["), text.rfind("]") + 1
+        text = text.replace("```json", "").replace("```", "").strip()
+        s, e = text.find("["), text.rfind("]") + 1
         if s != -1 and e > s:
             try:
                 kw = json.loads(text[s:e])
                 print(f"   Topics: {', '.join(kw)}")
                 return kw
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as err:
+                print(f"   ⚠️ JSON decode failed: {err}\\nRaw text: {text}")
                 pass
-        print("   Warning: fallback topic extraction")
+        print(f"   Warning: fallback topic extraction. Raw text: {text[:200]}")
         return [text[:80]]
 
     # ----------------------------------------------- 2. Semantic Scholar search
@@ -216,7 +217,11 @@ Papers from Semantic Scholar:
 Select TOP 5 most relevant papers. Score each 0-100 (relevancy_score).
 Prefer: 2023-2025 papers, highly cited, top venues (NeurIPS/ICML/ICLR/CVPR).
 
-Return ONLY a JSON array:
+CRITICAL INSTRUCTIONS:
+1. You MUST sort the JSON array by relevancy_score from highest to lowest (descending order).
+2. You MUST copy the exact 'link' provided in the context into the output. Do not omit the link field.
+
+Return ONLY a JSON array in this exact format:
 [{{"title":"...","authors":"...","link":"...","summary":"one sentence","relevance":"why relevant","key_result":"result to reproduce","relevancy_score":92}}]
 """
         text = self._generate(prompt, max_tokens=2000)
@@ -232,7 +237,7 @@ Return ONLY a JSON array:
                     p["cached"] = self._cache_get(self._paper_hash(p)) is not None
                 return papers
         except json.JSONDecodeError as ex:
-            print(f"   JSON error: {ex}")
+            print(f"   ⚠️ Papers JSON error: {ex}\\nRaw text: {text[:500]}")
         return []
 
     # ---------------------------------------------- 3. Code generation + refine
