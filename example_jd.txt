@@ -1,0 +1,21 @@
+Research Intern - Machine Learning (Summer 2025)
+Company: DeepMind
+
+We are looking for a Research Intern to join our team working on the following:
+
+- Large language model training and fine-tuning techniques
+- Reinforcement learning from human feedback (RLHF) and preference optimization
+- Efficient transformer architectures and attention mechanisms
+- Multimodal learning (vision + language)
+
+Responsibilities:
+- Reproduce and extend recent ML research papers
+- Implement experiments in PyTorch
+- Collaborate with researchers on novel ideas
+- Write clean, well-documented code
+
+Requirements:
+- Strong background in deep learning and NLP
+- Proficiency in Python and PyTorch
+- Familiarity with Hugging Face ecosystem
+- Experience reading and implementing research papers

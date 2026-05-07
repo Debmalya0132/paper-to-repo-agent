@@ -1,0 +1,25 @@
+# Environment & secrets
+.env
+*.env
+
+# Virtual environment
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Generated repos (user output, not source code)
+generated_repos/
+papers.db
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

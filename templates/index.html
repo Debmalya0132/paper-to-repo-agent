@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paper-to-Repo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      background: #fff;
+      color: #111;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+      line-height: 1.65;
+    }
+
+    h1 { font-size: 1.35rem; font-weight: bold; }
+    .tagline { color: #555; font-size: 0.9rem; margin-top: 4px; }
+    hr { border: none; border-top: 1px solid #ccc; margin: 28px 0; }
+    label { display: block; font-size: 0.88rem; margin-bottom: 6px; color: #333; }
+
+    textarea {
+      width: 100%; height: 190px;
+      font-family: "Courier New", monospace; font-size: 0.82rem;
+      background: #fafafa; border: 1px solid #aaa;
+      padding: 10px 12px; resize: vertical; outline: none; line-height: 1.5;
+    }
+    textarea:focus { border-color: #555; background: #fff; }
+
+    .btn {
+      display: inline-block; margin-top: 12px;
+      padding: 7px 18px; font-family: Georgia, serif; font-size: 0.88rem;
+      background: #111; color: #fff; border: none; cursor: pointer;
+    }
+    .btn:hover { background: #333; }
+    .btn:disabled { background: #999; cursor: not-allowed; }
+    .btn-secondary {
+      background: #fff; color: #111; border: 1px solid #111; margin-left: 8px;
+    }
+    .btn-secondary:hover { background: #f0f0f0; }
+
+    .status { margin-top: 10px; font-size: 0.82rem; color: #555; font-style: italic; min-height: 1.2em; }
+    .error { color: #c00; font-style: normal; }
+
+    /* Progress steps */
+    #progress-steps { margin: 12px 0; font-size: 0.82rem; color: #333; }
+    .step { padding: 3px 0; display: flex; align-items: center; gap: 6px; }
+    .step.done { color: #2a6; }
+    .step.active { color: #a70; font-style: italic; }
+
+    /* Paper cards */
+    .papers-heading { font-size: 0.88rem; margin-bottom: 12px; color: #333; }
+    .paper-card { border: 1px solid #ccc; padding: 12px 14px; margin-bottom: 9px; cursor: pointer; }
+    .paper-card:hover { border-color: #555; }
+    .paper-card.selected { border-color: #111; background: #f7f7f7; }
+    .paper-card .title { font-size: 0.92rem; font-weight: bold; }
+    .paper-card .meta { font-size: 0.78rem; color: #666; margin-top: 4px; }
+    .paper-card .summary { font-size: 0.82rem; color: #333; margin-top: 6px; }
+
+    .badge {
+      display: inline; font-size: 0.72rem;
+      border: 1px solid #aaa; padding: 1px 5px; margin-left: 6px;
+      font-family: "Courier New", monospace; vertical-align: middle;
+    }
+    .badge-cached { border-color: #888; color: #888; }
+
+    .areas-line { font-size: 0.8rem; color: #777; font-style: italic; margin-bottom: 14px; }
+
+    #section-papers { display: none; }
+    #section-github { display: none; margin-top: 20px; }
+    #section-github input {
+      font-family: "Courier New", monospace; font-size: 0.82rem;
+      border: 1px solid #aaa; padding: 5px 8px; width: 100%; margin-top: 4px; outline: none;
+    }
+    #section-github input:focus { border-color: #555; }
+    #section-github label { margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>Paper-to-Repo</h1>
+  <p class="tagline">Paste a job description. Pick a paper. Download starter code.</p>
+
+  <hr>
+
+  <!-- Step 1 -->
+  <div id="section-jd">
+    <label for="jd-input">Job description:</label>
+    <textarea id="jd-input" placeholder="Paste the full job description here."></textarea>
+    <br>
+    <button id="btn-analyze" class="btn" onclick="analyzeJD()">Find Papers &rarr;</button>
+    <div id="status-analyze" class="status"></div>
+  </div>
+
+  <!-- Step 2 -->
+  <div id="section-papers">
+    <hr>
+    <p id="areas-line" class="areas-line"></p>
+    <p class="papers-heading">Select a paper to implement:</p>
+    <div id="papers-list"></div>
+    <button id="btn-generate" class="btn" onclick="startGenerate()" disabled>
+      Generate &amp; Download &rarr;
+    </button>
+    <div id="progress-steps"></div>
+    <div id="status-generate" class="status"></div>
+
+    <!-- GitHub push section (shown after download) -->
+    <div id="section-github">
+      <hr>
+      <p style="font-size:0.88rem;margin-bottom:8px">Push to GitHub (optional):</p>
+      <label>GitHub Username</label>
+      <input type="text" id="gh-username" placeholder="your-github-username">
+      <label>Personal Access Token <span style="font-size:0.72rem;color:#888">(needs repo scope)</span></label>
+      <input type="password" id="gh-token" placeholder="ghp_...">
+      <br>
+      <button class="btn btn-secondary" onclick="pushToGithub()" style="margin-top:12px">
+        Push to GitHub &rarr;
+      </button>
+      <div id="status-github" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    let papersData = [];
+    let selectedPaper = null;
+    let lastJobId = null;
+
+    async function analyzeJD() {
+      const jd = document.getElementById('jd-input').value.trim();
+      if (!jd) { alert('Paste a job description first.'); return; }
+
+      const btn = document.getElementById('btn-analyze');
+      const status = document.getElementById('status-analyze');
+      btn.disabled = true;
+      status.textContent = 'Running chain-of-thought analysis and searching Semantic Scholar — ~20-30s…';
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_description: jd })
+        });
+        const data = await res.json();
+        if (data.error) {
+          status.innerHTML = '<span class="error">Error: ' + data.error + '</span>';
+          btn.disabled = false;
+          return;
+        }
+        papersData = data.papers;
+        status.textContent = '';
+        if (data.research_areas && data.research_areas.length) {
+          document.getElementById('areas-line').textContent =
+            'CoT topics: ' + data.research_areas.join(', ');
+        }
+        renderPapers(papersData);
+      } catch (e) {
+        status.innerHTML = '<span class="error">Request failed: ' + e.message + '</span>';
+        btn.disabled = false;
+      }
+    }
+
+    function renderPapers(papers) {
+      const list = document.getElementById('papers-list');
+      list.innerHTML = '';
+
+      if (!papers || papers.length === 0) {
+        list.innerHTML = '<p style="font-size:0.85rem;color:#c00">No papers found. Try a more specific job description.</p>';
+        document.getElementById('section-papers').style.display = 'block';
+        return;
+      }
+
+      papers.forEach(function(paper, i) {
+        const card = document.createElement('div');
+        card.className = 'paper-card';
+        card.id = 'paper-' + i;
+
+        const score = paper.relevancy_score || '?';
+        const scoreColor = score >= 85 ? '#2a6' : score >= 70 ? '#a70' : '#555';
+        const linkHtml = paper.link
+          ? ' <a href="' + paper.link + '" target="_blank" onclick="event.stopPropagation()" style="font-size:0.73rem;color:#555;text-decoration:underline">paper ↗</a>'
+          : '';
+        const cachedBadge = paper.cached
+          ? '<span class="badge badge-cached">cached</span>'
+          : '';
+
+        card.innerHTML =
+          '<div class="title">' + (i+1) + '. ' + paper.title + linkHtml +
+            '<span class="badge" style="color:' + scoreColor + ';border-color:' + scoreColor + '">' + score + '% match</span>' +
+            cachedBadge +
+          '</div>' +
+          '<div class="meta">' + (paper.authors || '') + '</div>' +
+          '<div class="summary">' + (paper.summary || '') + '</div>' +
+          '<div class="meta" style="margin-top:5px">Reproduce: <em>' + (paper.key_result || '') + '</em></div>';
+
+        card.onclick = function() { selectPaper(i); };
+        list.appendChild(card);
+      });
+
+      document.getElementById('section-papers').style.display = 'block';
+    }
+
+    function selectPaper(idx) {
+      selectedPaper = papersData[idx];
+      document.querySelectorAll('.paper-card').forEach(el => el.classList.remove('selected'));
+      document.getElementById('paper-' + idx).classList.add('selected');
+      document.getElementById('btn-generate').disabled = false;
+      document.getElementById('section-github').style.display = 'none';
+    }
+
+    function addStep(msg, done) {
+      const steps = document.getElementById('progress-steps');
+      // Check if there's an active step to mark as done
+      const active = steps.querySelector('.step.active');
+      if (active) active.className = 'step done';
+      const div = document.createElement('div');
+      div.className = done ? 'step done' : 'step active';
+      div.textContent = (done ? '✓ ' : '⋯ ') + msg;
+      steps.appendChild(div);
+    }
+
+    async function startGenerate() {
+      if (!selectedPaper) return;
+      const btn = document.getElementById('btn-generate');
+      const status = document.getElementById('status-generate');
+      document.getElementById('progress-steps').innerHTML = '';
+      document.getElementById('section-github').style.display = 'none';
+
+      btn.disabled = true;
+      status.textContent = '';
+      addStep('Starting generation…');
+
+      try {
+        // Kick off background job
+        const startRes = await fetch('/api/generate/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paper: selectedPaper })
+        });
+        const { job_id, error } = await startRes.json();
+        if (error) { status.innerHTML = '<span class="error">' + error + '</span>'; btn.disabled = false; return; }
+        lastJobId = job_id;
+
+        // Connect to SSE stream
+        const evtSource = new EventSource('/api/generate/stream/' + job_id);
+
+        evtSource.onmessage = function(event) {
+          const data = JSON.parse(event.data);
+          if (data.type === 'progress') {
+            addStep(data.message);
+          } else if (data.type === 'done') {
+            evtSource.close();
+            // Mark last step done
+            const active = document.getElementById('progress-steps').querySelector('.step.active');
+            if (active) active.className = 'step done';
+            triggerDownload(data.job_id);
+            btn.disabled = false;
+            status.textContent = 'Download started. Check quality_report.md for benchmark scores.';
+            document.getElementById('section-github').style.display = 'block';
+          } else if (data.type === 'error') {
+            evtSource.close();
+            status.innerHTML = '<span class="error">Error: ' + data.message + '</span>';
+            btn.disabled = false;
+          }
+        };
+
+        evtSource.onerror = function() {
+          evtSource.close();
+          status.innerHTML = '<span class="error">Connection lost.</span>';
+          btn.disabled = false;
+        };
+
+      } catch (e) {
+        status.innerHTML = '<span class="error">Request failed: ' + e.message + '</span>';
+        btn.disabled = false;
+      }
+    }
+
+    async function triggerDownload(jobId) {
+      const res = await fetch('/api/download/' + jobId);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'implementation.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function pushToGithub() {
+      const token = document.getElementById('gh-token').value.trim();
+      const username = document.getElementById('gh-username').value.trim();
+      const status = document.getElementById('status-github');
+
+      if (!token || !username) {
+        status.innerHTML = '<span class="error">Both GitHub username and token are required.</span>';
+        return;
+      }
+
+      status.textContent = 'Pushing to GitHub…';
+      try {
+        const res = await fetch('/api/github-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paper: selectedPaper, github_token: token, github_username: username })
+        });
+        const data = await res.json();
+        if (data.error) {
+          status.innerHTML = '<span class="error">Error: ' + data.error + '</span>';
+        } else {
+          status.innerHTML = '✓ Pushed! <a href="' + data.repo_url + '" target="_blank">' + data.repo_url + '</a>';
+        }
+      } catch (e) {
+        status.innerHTML = '<span class="error">Request failed: ' + e.message + '</span>';
+      }
+    }
+  </script>
+
+</body>
+</html>
