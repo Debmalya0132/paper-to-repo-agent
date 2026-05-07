@@ -57,14 +57,27 @@ class PaperToRepoAgent:
 
     # ------------------------------------------------------------------ helpers
     def _generate(self, prompt: str, max_tokens: int = 2000) -> str:
-        client = random.choice(self.clients)
-        resp = client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=0.3,
-        )
-        return resp.choices[0].message.content or ""
+        available = list(self.clients)
+        random.shuffle(available)
+        
+        last_err = None
+        for client in available:
+            try:
+                resp = client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=max_tokens,
+                    temperature=0.3,
+                )
+                return resp.choices[0].message.content or ""
+            except Exception as e:
+                if "429" in str(e) or "rate limit" in str(e).lower() or "413" in str(e):
+                    print(f"   ⚠️ API Key limit hit. Auto-switching to next key...")
+                    last_err = e
+                    continue
+                raise e
+                
+        raise Exception(f"All API keys exhausted! Please wait for quotas to reset. Last error: {last_err}")
 
     def _parse_files(self, response: str) -> Dict[str, str]:
         files = {}
